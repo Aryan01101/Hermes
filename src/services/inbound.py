@@ -57,7 +57,7 @@ async def process_inbound_email(parsed_email: Dict[str, Any]) -> Dict[str, Any]:
         in_reply_to=parsed_email["in_reply_to"],
         references=parsed_email["references"],
     )
-    graph = get_workflow_graph()
+    graph = await get_workflow_graph()
     config = {"configurable": {"thread_id": str(thread["id"])}}
 
     logger.info("Starting workflow for thread %s", thread["id"])

@@ -4,8 +4,8 @@ import logging
 from typing import Dict
 from uuid import UUID
 
-import psycopg
-from langgraph.checkpoint.postgres import PostgresSaver
+import asyncpg
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, StateGraph
 
 from src.services.database import get_database
@@ -345,7 +345,7 @@ def should_continue_after_feedback(state: EmailTriageState) -> str:
 # =============================================================================
 
 
-def create_email_triage_graph(checkpointer: PostgresSaver) -> StateGraph:
+def create_email_triage_graph(checkpointer: AsyncPostgresSaver) -> StateGraph:
     """
     Create the email triage state machine.
 
@@ -410,8 +410,8 @@ _graph_instance = None
 _checkpointer_instance = None
 
 
-def get_workflow_graph():
-    """Get or create workflow graph instance."""
+async def get_workflow_graph():
+    """Get or create workflow graph instance with async checkpointer."""
     global _graph_instance, _checkpointer_instance
 
     if _graph_instance is None:
@@ -419,19 +419,18 @@ def get_workflow_graph():
 
         settings = get_settings()
 
-        # Create persistent database connection for checkpointer
-        # prepare_threshold=0 is required for LangGraph compatibility
-        conn = psycopg.connect(
+        # Create async connection pool for checkpointer
+        pool = await asyncpg.create_pool(
             settings.database_url,
-            autocommit=True,
-            prepare_threshold=0
+            min_size=1,
+            max_size=10,
         )
 
-        # Create Postgres checkpointer with connection
-        _checkpointer_instance = PostgresSaver(conn)
+        # Create async Postgres checkpointer with pool
+        _checkpointer_instance = AsyncPostgresSaver(pool)
 
         # Setup checkpoint tables (idempotent - safe to call multiple times)
-        _checkpointer_instance.setup()
+        await _checkpointer_instance.setup()
 
         # Create graph
         _graph_instance = create_email_triage_graph(_checkpointer_instance)
