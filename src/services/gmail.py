@@ -32,47 +32,69 @@ class GmailMailService:
 
     async def run(self) -> None:
         """Continuously poll the Inbox without bringing down the web process."""
+        logger.info("Gmail polling started (interval: %ss)", self.settings.gmail_poll_interval_seconds)
+
         while True:
             try:
+                logger.info("Checking Gmail inbox for unread messages...")
                 processed = await self.poll_inbox()
                 if processed:
-                    logger.info("Processed %s Gmail message(s)", processed)
+                    logger.info("✓ Processed %s Gmail message(s)", processed)
+                else:
+                    logger.info("No unread messages found in Gmail inbox")
             except asyncio.CancelledError:
+                logger.info("Gmail polling cancelled")
                 raise
             except Exception:
-                logger.exception("Gmail Inbox polling failed")
+                logger.exception("✗ Gmail Inbox polling failed")
 
             await asyncio.sleep(self.settings.gmail_poll_interval_seconds)
 
     async def poll_inbox(self) -> int:
         """Process unread Inbox messages, then remove their UNREAD label on success."""
+        logger.debug("Getting Gmail access token...")
         access_token = await self._get_access_token()
+        logger.debug("✓ Access token obtained")
+
         headers = {"Authorization": f"Bearer {access_token}"}
         params = {"q": "in:inbox is:unread", "maxResults": "10"}
 
         async with httpx.AsyncClient(timeout=20.0) as client:
+            logger.debug("Querying Gmail API for unread messages...")
             response = await client.get(
                 f"{GMAIL_BASE_URL}/messages", headers=headers, params=params
             )
             response.raise_for_status()
             messages = response.json().get("messages", [])
+            logger.info("Found %s unread message(s) in Gmail inbox", len(messages))
 
-            for message in messages:
+            for idx, message in enumerate(messages, 1):
                 message_id = message["id"]
+                logger.info("[%s/%s] Processing Gmail message ID: %s", idx, len(messages), message_id)
+
+                logger.debug("Fetching raw message content...")
                 raw_message = await client.get(
                     f"{GMAIL_BASE_URL}/messages/{message_id}",
                     headers=headers,
                     params={"format": "raw"},
                 )
                 raw_message.raise_for_status()
-                await process_inbound_email(self._parse_message(raw_message.json(), message_id))
 
+                parsed = self._parse_message(raw_message.json(), message_id)
+                logger.info("Email from: %s, subject: %s", parsed["from_email"], parsed["subject"])
+
+                logger.debug("Processing inbound email...")
+                await process_inbound_email(parsed)
+                logger.info("✓ Email processed successfully")
+
+                logger.debug("Marking message as read...")
                 mark_read = await client.post(
                     f"{GMAIL_BASE_URL}/messages/{message_id}/modify",
                     headers=headers,
                     json={"removeLabelIds": ["UNREAD"]},
                 )
                 mark_read.raise_for_status()
+                logger.debug("✓ Message marked as read")
 
         return len(messages)
 
@@ -110,33 +132,47 @@ class GmailMailService:
 
     async def _get_access_token(self) -> str:
         """Refresh Gmail credentials and persist the updated OAuth data."""
+        logger.debug("Retrieving Gmail token from database...")
         token_cache_value = await self.db.get_integration_token("gmail")
         if not token_cache_value and self.settings.gmail_token_cache:
+            logger.debug("Token not in database, using GMAIL_TOKEN_CACHE from environment")
             token_cache_value = self.settings.gmail_token_cache
             await self.db.upsert_integration_token("gmail", token_cache_value)
+            logger.debug("✓ Saved GMAIL_TOKEN_CACHE to database")
 
         if not token_cache_value:
+            logger.error("✗ Gmail is not authorized - no token cache found")
             raise RuntimeError(
                 "Gmail is not authorized. Add GMAIL_TOKEN_CACHE after running "
                 "scripts/authorize_gmail.py."
             )
 
         try:
+            logger.debug("Decoding OAuth credentials...")
             credentials_info = json.loads(base64.b64decode(token_cache_value).decode("utf-8"))
             credentials = Credentials.from_authorized_user_info(credentials_info, GMAIL_SCOPES)
+            logger.debug("✓ OAuth credentials decoded successfully")
         except (ValueError, json.JSONDecodeError) as exc:
+            logger.error("✗ Invalid GMAIL_TOKEN_CACHE format")
             raise RuntimeError("GMAIL_TOKEN_CACHE is not valid OAuth credentials") from exc
 
         if not credentials.valid:
             if not credentials.expired or not credentials.refresh_token:
+                logger.error("✗ Gmail authorization expired and cannot be refreshed")
                 raise RuntimeError(
                     "Gmail authorization expired; run scripts/authorize_gmail.py again"
                 )
+            logger.info("Token expired, refreshing...")
             await asyncio.to_thread(credentials.refresh, Request())
+            logger.info("✓ Token refreshed successfully")
 
+        logger.debug("Persisting updated token cache...")
         encoded_cache = base64.b64encode(credentials.to_json().encode("utf-8")).decode("ascii")
         await self.db.upsert_integration_token("gmail", encoded_cache)
+        logger.debug("✓ Token cache persisted to database")
+
         if not credentials.token:
+            logger.error("✗ No access token in credentials")
             raise RuntimeError("Gmail authorization did not return an access token")
         return credentials.token
 
