@@ -416,8 +416,17 @@ async def get_workflow_graph():
 
     if _graph_instance is None:
         from src.core.config import get_settings
+        from uuid import UUID as PyUUID
+        from psycopg.types.string import StrDumper
+        from psycopg.adapt import Dumper
 
         settings = get_settings()
+
+        # Create custom dumper to convert UUID objects to strings for JSON serialization
+        class UUIDStrDumper(StrDumper):
+            """Dump UUID as string for LangGraph checkpoint serialization."""
+            def dump(self, obj):
+                return str(obj).encode('utf-8')
 
         # Create async psycopg connection for checkpointer
         # AsyncPostgresSaver expects psycopg.AsyncConnection, not asyncpg
@@ -425,6 +434,9 @@ async def get_workflow_graph():
             settings.database_url,
             autocommit=True,
         )
+
+        # Register UUID -> string conversion to avoid serialization errors in LangGraph checkpoints
+        conn.adapters.register_dumper(PyUUID, UUIDStrDumper)
 
         # Create async Postgres checkpointer with psycopg connection
         _checkpointer_instance = AsyncPostgresSaver(conn)
