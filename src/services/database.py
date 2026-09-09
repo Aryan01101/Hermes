@@ -1,5 +1,6 @@
 """Supabase database client and connection management."""
 
+import asyncpg
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -14,6 +15,7 @@ class DatabaseService:
     def __init__(self) -> None:
         """Initialize database service with Supabase client."""
         settings = get_settings()
+        self.settings = settings
         self.client: Client = create_client(
             supabase_url=settings.supabase_url,
             supabase_key=settings.supabase_service_role_key,
@@ -202,22 +204,39 @@ class DatabaseService:
     # =========================================================================
 
     async def get_integration_token(self, provider: str) -> Optional[str]:
-        """Return the persisted OAuth token cache for an integration."""
-        response = (
-            self.client.table("integration_tokens")
-            .select("token_cache")
-            .eq("provider", provider)
-            .limit(1)
-            .execute()
-        )
-        return response.data[0]["token_cache"] if response.data else None
+        """Return the persisted OAuth token cache for an integration.
+
+        Uses direct PostgreSQL connection to bypass PostgREST schema cache issues.
+        """
+        conn = await asyncpg.connect(self.settings.database_url)
+        try:
+            row = await conn.fetchrow(
+                "SELECT token_cache FROM integration_tokens WHERE provider = $1",
+                provider
+            )
+            return row["token_cache"] if row else None
+        finally:
+            await conn.close()
 
     async def upsert_integration_token(self, provider: str, token_cache: str) -> None:
-        """Persist a refreshed OAuth token cache for an integration."""
-        self.client.table("integration_tokens").upsert(
-            {"provider": provider, "token_cache": token_cache},
-            on_conflict="provider",
-        ).execute()
+        """Persist a refreshed OAuth token cache for an integration.
+
+        Uses direct PostgreSQL connection to bypass PostgREST schema cache issues.
+        """
+        conn = await asyncpg.connect(self.settings.database_url)
+        try:
+            await conn.execute(
+                """
+                INSERT INTO integration_tokens (provider, token_cache)
+                VALUES ($1, $2)
+                ON CONFLICT (provider)
+                DO UPDATE SET token_cache = EXCLUDED.token_cache, updated_at = NOW()
+                """,
+                provider,
+                token_cache
+            )
+        finally:
+            await conn.close()
 
     async def add_reviewer(self, phone_number: str, name: Optional[str] = None) -> Dict[str, Any]:
         """Add a new reviewer."""
