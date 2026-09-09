@@ -4,7 +4,7 @@ import logging
 from typing import Dict
 from uuid import UUID
 
-import asyncpg
+import psycopg
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, StateGraph
 
@@ -419,15 +419,15 @@ async def get_workflow_graph():
 
         settings = get_settings()
 
-        # Create async connection pool for checkpointer
-        pool = await asyncpg.create_pool(
+        # Create async psycopg connection for checkpointer
+        # AsyncPostgresSaver expects psycopg.AsyncConnection, not asyncpg
+        conn = await psycopg.AsyncConnection.connect(
             settings.database_url,
-            min_size=1,
-            max_size=10,
+            autocommit=True,
         )
 
-        # Create async Postgres checkpointer with pool
-        _checkpointer_instance = AsyncPostgresSaver(pool)
+        # Create async Postgres checkpointer with psycopg connection
+        _checkpointer_instance = AsyncPostgresSaver(conn)
 
         # Setup checkpoint tables (idempotent - safe to call multiple times)
         await _checkpointer_instance.setup()
