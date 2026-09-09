@@ -5,6 +5,7 @@ import logging
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncGenerator
 
+import asyncpg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -23,6 +24,82 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def run_database_migrations() -> None:
+    """Ensure integration_tokens table exists before application starts."""
+    settings = get_settings()
+
+    try:
+        logger.info("🔧 Running database migrations...")
+        conn = await asyncpg.connect(settings.database_url)
+
+        # Check if integration_tokens table exists
+        exists = await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
+                AND table_name = 'integration_tokens'
+            )
+            """
+        )
+
+        if exists:
+            logger.info("✅ integration_tokens table already exists")
+        else:
+            logger.info("📝 Creating integration_tokens table...")
+
+            # Create the table
+            await conn.execute(
+                """
+                CREATE TABLE integration_tokens (
+                    provider TEXT PRIMARY KEY,
+                    token_cache TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+
+            # Create the updated_at trigger function
+            await conn.execute(
+                """
+                CREATE OR REPLACE FUNCTION update_integration_tokens_updated_at()
+                RETURNS TRIGGER AS $$
+                BEGIN
+                    NEW.updated_at = NOW();
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+                """
+            )
+
+            # Create the trigger
+            await conn.execute(
+                """
+                DROP TRIGGER IF EXISTS update_integration_tokens_updated_at ON integration_tokens;
+                CREATE TRIGGER update_integration_tokens_updated_at
+                    BEFORE UPDATE ON integration_tokens
+                    FOR EACH ROW
+                    EXECUTE FUNCTION update_integration_tokens_updated_at();
+                """
+            )
+
+            # Enable RLS
+            await conn.execute(
+                """
+                ALTER TABLE integration_tokens ENABLE ROW LEVEL SECURITY;
+                """
+            )
+
+            logger.info("✅ integration_tokens table created successfully")
+
+        await conn.close()
+        logger.info("✅ Database migrations complete")
+
+    except Exception as e:
+        logger.error(f"❌ Migration failed: {e}")
+        raise
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     """Application lifespan manager."""
@@ -30,6 +107,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Log level: {settings.log_level}")
+
+    # Run database migrations before anything else
+    await run_database_migrations()
 
     outlook_task: asyncio.Task | None = None
     gmail_task: asyncio.Task | None = None
