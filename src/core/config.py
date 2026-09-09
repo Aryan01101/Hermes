@@ -77,6 +77,18 @@ class Settings(BaseSettings):
         default=60, ge=30, description="Seconds between Outlook Inbox polls"
     )
 
+    # Gmail inbox (Gmail API, delegated OAuth access for personal accounts)
+    gmail_polling_enabled: bool = Field(
+        default=False, description="Poll the configured Gmail Inbox through the Gmail API"
+    )
+    gmail_token_cache: Optional[str] = Field(
+        default=None,
+        description="Initial base64-encoded Gmail OAuth credentials used to seed Supabase",
+    )
+    gmail_poll_interval_seconds: int = Field(
+        default=60, ge=30, description="Seconds between Gmail Inbox polls"
+    )
+
     # WhatsApp (Twilio)
     twilio_account_sid: str = Field(..., description="Twilio account SID")
     twilio_auth_token: str = Field(..., description="Twilio auth token")

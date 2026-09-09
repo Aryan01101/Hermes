@@ -30,6 +30,8 @@ env/
 # Environment variables
 .env
 .env.local
+client_secret*.json
+credentials.json
 
 # IDE
 .vscode/

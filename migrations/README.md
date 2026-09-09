@@ -46,7 +46,7 @@ We'll add programmatic migration support in Phase 2.2.
   - Flexible JSONB details
 
 6. **integration_tokens** (migration `002`): Persisted OAuth token cache for
-   Microsoft Graph delegated Outlook access.
+   delegated Microsoft Graph Outlook and Gmail API access.
 
 ### Helper Functions
 

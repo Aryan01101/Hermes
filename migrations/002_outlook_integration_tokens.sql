@@ -1,4 +1,4 @@
--- Persistent OAuth token cache for Microsoft Graph delegated access.
+-- Persistent OAuth token cache for delegated mailbox access.
 -- Service-role access bypasses RLS; no browser or anonymous role can read this table.
 
 CREATE TABLE IF NOT EXISTS integration_tokens (

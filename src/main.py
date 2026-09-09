@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from src.api.health import router as health_router
 from src.api.webhooks import router as webhooks_router
 from src.core.config import get_settings
+from src.services.gmail import GmailMailService
 from src.services.outlook import OutlookMailService
 
 # Configure logging
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info(f"Log level: {settings.log_level}")
 
     outlook_task: asyncio.Task | None = None
+    gmail_task: asyncio.Task | None = None
 
     # Startup tasks
     if settings.outlook_polling_enabled:
@@ -39,6 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
         outlook_task = asyncio.create_task(OutlookMailService().run())
         logger.info("Outlook Inbox polling enabled")
+
+    if settings.gmail_polling_enabled:
+        gmail_task = asyncio.create_task(GmailMailService().run())
+        logger.info("Gmail Inbox polling enabled")
 
     logger.info("Application startup complete")
 
@@ -49,6 +55,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         outlook_task.cancel()
         with suppress(asyncio.CancelledError):
             await outlook_task
+
+    if gmail_task:
+        gmail_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await gmail_task
 
     logger.info("Application shutdown")
 
