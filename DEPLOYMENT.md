@@ -49,6 +49,9 @@ Railway provides the simplest deployment experience for Python/FastAPI apps with
   message in Outlook alone does not call this webhook.
 - Configure that Inbound Parse domain's MX records with SendGrid before relying
   on the forwarding rule.
+- If Hermes reads a personal Outlook.com Inbox directly, use
+  [OUTLOOK_SETUP.md](OUTLOOK_SETUP.md) instead; no SendGrid Inbound Parse domain
+  or Outlook forwarding rule is required.
 
 ### Configure Twilio WhatsApp
 - URL: `https://your-app.railway.app/webhooks/whatsapp`

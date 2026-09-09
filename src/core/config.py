@@ -62,6 +62,21 @@ class Settings(BaseSettings):
     )
     from_name: str = Field(default="Support Team", description="From name for outbound replies")
 
+    # Outlook inbox (Microsoft Graph, delegated access for personal accounts)
+    outlook_polling_enabled: bool = Field(
+        default=False, description="Poll the configured Outlook Inbox through Microsoft Graph"
+    )
+    outlook_client_id: Optional[str] = Field(
+        default=None, description="Microsoft Entra application (client) ID"
+    )
+    outlook_token_cache: Optional[str] = Field(
+        default=None,
+        description="Initial base64-encoded MSAL token cache used to seed Supabase",
+    )
+    outlook_poll_interval_seconds: int = Field(
+        default=60, ge=30, description="Seconds between Outlook Inbox polls"
+    )
+
     # WhatsApp (Twilio)
     twilio_account_sid: str = Field(..., description="Twilio account SID")
     twilio_auth_token: str = Field(..., description="Twilio auth token")

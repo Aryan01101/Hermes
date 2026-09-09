@@ -11,9 +11,10 @@ from twilio.request_validator import RequestValidator
 from src.core.config import get_settings
 from src.services.database import get_database
 from src.services.email import get_email_service
+from src.services.inbound import process_inbound_email
 from src.services.whatsapp import get_whatsapp_service
 from src.workflows.graph import get_workflow_graph
-from src.workflows.state import create_initial_state, create_redraft_state
+from src.workflows.state import create_redraft_state
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -59,88 +60,10 @@ async def email_webhook(request: Request) -> Dict[str, Any]:
 
         logger.info(f"Received email webhook from {form_data.get('from', 'unknown')}")
 
-        # Get services
+        # Parse the SendGrid form into the shared inbound-email format.
         email_service = get_email_service()
-        db = get_database()
-
-        # Parse email payload
         parsed_email = email_service.parse_sendgrid_payload(form_data)
-
-        # Extract clean reply content
-        reply_content = email_service.extract_reply_content(parsed_email["text_body"])
-
-        # Find or create thread
-        thread = None
-
-        # Try to find existing thread by Message-ID (exact match for trailing emails)
-        if parsed_email["message_id"]:
-            thread = await db.get_thread_by_message_id(parsed_email["message_id"])
-
-        # Try to find by References (reply to existing thread)
-        if not thread and parsed_email["references"]:
-            thread = await db.get_thread_by_references(parsed_email["references"])
-
-        # Try to find by In-Reply-To
-        if not thread and parsed_email["in_reply_to"]:
-            thread = await db.get_thread_by_message_id(parsed_email["in_reply_to"])
-
-        # Create new thread if not found
-        if not thread:
-            logger.info(f"Creating new thread for {parsed_email['from_email']}")
-            thread = await db.create_thread(
-                customer_email=parsed_email["from_email"],
-                subject=parsed_email["subject"],
-                message_id=parsed_email["message_id"],
-                in_reply_to=parsed_email["in_reply_to"],
-                references=parsed_email["references"],
-            )
-        else:
-            logger.info(f"Found existing thread {thread['id']}")
-
-            # Trailing email edge case: mark pending drafts as stale
-            stale_count = await db.mark_drafts_stale(UUID(thread["id"]))
-            if stale_count > 0:
-                logger.info(f"Marked {stale_count} pending drafts as stale")
-
-        # Log event
-        await db.log_event(
-            event_type="email_received",
-            actor="system",
-            details={
-                "from": parsed_email["from_email"],
-                "subject": parsed_email["subject"],
-            },
-            thread_id=UUID(thread["id"]),
-        )
-
-        # Create initial workflow state
-        initial_state = create_initial_state(
-            thread_id=str(thread["id"]),
-            customer_email=parsed_email["from_email"],
-            subject=parsed_email["subject"],
-            email_body=reply_content,
-            message_id=parsed_email["message_id"],
-            in_reply_to=parsed_email["in_reply_to"],
-            references=parsed_email["references"],
-        )
-
-        # Get workflow graph
-        graph = get_workflow_graph()
-
-        # Invoke workflow (runs until first interrupt at "send_to_reviewer")
-        config = {"configurable": {"thread_id": str(thread["id"])}}
-
-        logger.info(f"Starting LangGraph workflow for thread {thread['id']}")
-        result = await graph.ainvoke(initial_state, config)
-
-        logger.info(f"Email processed successfully. Thread: {thread['id']}")
-
-        return {
-            "success": True,
-            "thread_id": thread["id"],
-            "workflow_status": "started",
-            "current_step": result.get("current_step"),
-        }
+        return await process_inbound_email(parsed_email)
 
     except HTTPException:
         raise
@@ -274,7 +197,7 @@ async def whatsapp_webhook(request: Request) -> Dict[str, Any] | Response:
             draft = await db.get_most_recent_pending_draft()
 
         if not draft or draft["status"] != "pending":
-            logger.warning(f"No pending drafts found for reviewer response")
+            logger.warning("No pending drafts found for reviewer response")
             await whatsapp_service.send_confirmation(
                 reviewer_phone=reviewer_phone,
                 action="help",

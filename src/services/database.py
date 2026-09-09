@@ -197,6 +197,28 @@ class DatabaseService:
         response = self.client.table("reviewers").select("*").eq("active", True).execute()
         return response.data if response.data else []
 
+    # =========================================================================
+    # Integration Tokens
+    # =========================================================================
+
+    async def get_integration_token(self, provider: str) -> Optional[str]:
+        """Return the persisted OAuth token cache for an integration."""
+        response = (
+            self.client.table("integration_tokens")
+            .select("token_cache")
+            .eq("provider", provider)
+            .limit(1)
+            .execute()
+        )
+        return response.data[0]["token_cache"] if response.data else None
+
+    async def upsert_integration_token(self, provider: str, token_cache: str) -> None:
+        """Persist a refreshed OAuth token cache for an integration."""
+        self.client.table("integration_tokens").upsert(
+            {"provider": provider, "token_cache": token_cache},
+            on_conflict="provider",
+        ).execute()
+
     async def add_reviewer(self, phone_number: str, name: Optional[str] = None) -> Dict[str, Any]:
         """Add a new reviewer."""
         data = {"phone_number": phone_number, "name": name}

@@ -41,9 +41,12 @@ We'll add programmatic migration support in Phase 2.2.
    - Active/inactive flag
 
 5. **audit_log**: Complete audit trail
-   - All events with timestamps
-   - Actor attribution
-   - Flexible JSONB details
+  - All events with timestamps
+  - Actor attribution
+  - Flexible JSONB details
+
+6. **integration_tokens** (migration `002`): Persisted OAuth token cache for
+   Microsoft Graph delegated Outlook access.
 
 ### Helper Functions
 

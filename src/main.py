@@ -1,7 +1,8 @@
 """Hermes v2 - AI Communications Agent FastAPI Application."""
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
@@ -11,6 +12,7 @@ from fastapi.responses import JSONResponse
 from src.api.health import router as health_router
 from src.api.webhooks import router as webhooks_router
 from src.core.config import get_settings
+from src.services.outlook import OutlookMailService
 
 # Configure logging
 logging.basicConfig(
@@ -28,12 +30,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Log level: {settings.log_level}")
 
+    outlook_task: asyncio.Task | None = None
+
     # Startup tasks
+    if settings.outlook_polling_enabled:
+        if not settings.outlook_client_id:
+            raise RuntimeError("OUTLOOK_CLIENT_ID is required when Outlook polling is enabled")
+
+        outlook_task = asyncio.create_task(OutlookMailService().run())
+        logger.info("Outlook Inbox polling enabled")
+
     logger.info("Application startup complete")
 
     yield
 
     # Shutdown tasks
+    if outlook_task:
+        outlook_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await outlook_task
+
     logger.info("Application shutdown")
 
 
