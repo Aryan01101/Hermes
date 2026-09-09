@@ -4,6 +4,7 @@ import logging
 from typing import Dict
 from uuid import UUID
 
+import psycopg
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
 
@@ -418,9 +419,16 @@ def get_workflow_graph():
 
         settings = get_settings()
 
-        # Create Postgres checkpointer using connection string
-        # This properly handles async/sync operations
-        _checkpointer_instance = PostgresSaver.from_conn_string(settings.database_url)
+        # Create persistent database connection for checkpointer
+        # prepare_threshold=0 is required for LangGraph compatibility
+        conn = psycopg.connect(
+            settings.database_url,
+            autocommit=True,
+            prepare_threshold=0
+        )
+
+        # Create Postgres checkpointer with connection
+        _checkpointer_instance = PostgresSaver(conn)
 
         # Setup checkpoint tables (idempotent - safe to call multiple times)
         _checkpointer_instance.setup()
