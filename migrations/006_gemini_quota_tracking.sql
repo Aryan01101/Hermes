@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS gemini_quota_tracking (
 );
 
 -- Index for fast lookups by date
-CREATE INDEX idx_gemini_quota_date ON gemini_quota_tracking(quota_date DESC);
+CREATE INDEX IF NOT EXISTS idx_gemini_quota_date ON gemini_quota_tracking(quota_date DESC);
 
 -- ============================================================================
 -- Helper Function: Get or Create Today's Quota Record
