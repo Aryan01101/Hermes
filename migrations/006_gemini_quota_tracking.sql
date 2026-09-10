@@ -135,7 +135,9 @@ COMMENT ON COLUMN gemini_quota_tracking.limit_reached_at IS 'Timestamp when dail
 -- ============================================================================
 ALTER TABLE gemini_quota_tracking ENABLE ROW LEVEL SECURITY;
 
--- Allow service role full access
+-- Allow service role full access (drop first to allow re-running migration)
+DROP POLICY IF EXISTS "Service role has full access to quota tracking" ON gemini_quota_tracking;
+
 CREATE POLICY "Service role has full access to quota tracking"
     ON gemini_quota_tracking
     FOR ALL
