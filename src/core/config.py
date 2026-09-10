@@ -53,6 +53,14 @@ class Settings(BaseSettings):
         default="gemini-3.6-flash",
         description="Gemini model for extraction and drafting",
     )
+    gemini_daily_request_limit: int = Field(
+        default=20,
+        description="Daily Gemini API request limit (20 for free tier, higher for paid accounts)",
+    )
+    gemini_enable_quota_tracking: bool = Field(
+        default=True,
+        description="Enable Gemini quota tracking to prevent exceeding daily limits",
+    )
 
     # Email (SendGrid)
     sendgrid_api_key: str = Field(..., description="SendGrid API key")
@@ -89,6 +97,16 @@ class Settings(BaseSettings):
         default=60, ge=30, description="Seconds between Gmail Inbox polls"
     )
 
+    # Email Filtering
+    allowed_sender_domains: Optional[str] = Field(
+        default=None,
+        description="Comma-separated list of allowed sender domains (e.g., 'customer.com,client.com'). If not set, all domains are allowed.",
+    )
+    allowed_sender_emails: Optional[str] = Field(
+        default=None,
+        description="Comma-separated list of allowed sender emails (e.g., 'support@company.com'). If not set, all emails are allowed.",
+    )
+
     # WhatsApp (Twilio)
     twilio_account_sid: str = Field(..., description="Twilio account SID")
     twilio_auth_token: str = Field(..., description="Twilio auth token")
@@ -111,6 +129,20 @@ class Settings(BaseSettings):
     # LangGraph
     langgraph_checkpoint_namespace: str = Field(
         default="hermes_checkpoints", description="LangGraph checkpoint namespace"
+    )
+
+    # Circuit Breaker
+    circuit_breaker_enabled: bool = Field(
+        default=True,
+        description="Enable circuit breaker to stop polling after consecutive failures",
+    )
+    circuit_breaker_failure_threshold: int = Field(
+        default=3,
+        description="Number of consecutive failures before circuit breaker opens",
+    )
+    circuit_breaker_reset_timeout_minutes: int = Field(
+        default=60,
+        description="Minutes before circuit breaker auto-resets",
     )
 
     @field_validator("environment")

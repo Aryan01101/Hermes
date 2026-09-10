@@ -339,6 +339,97 @@ class DatabaseService:
                 "remaining": 30,
             }
 
+    # =========================================================================
+    # Gemini Quota Tracking
+    # =========================================================================
+
+    async def check_gemini_quota_available(self) -> bool:
+        """
+        Check if Gemini API quota is available for today.
+
+        Uses the database function to check if we're under the daily limit.
+
+        Returns:
+            True if quota available, False if limit reached
+        """
+        try:
+            # Call the database function
+            result = await self._execute_function("check_gemini_quota_available")
+            return result if isinstance(result, bool) else True
+        except Exception:
+            # On error, allow processing (fail open to avoid blocking workflow)
+            return True
+
+    async def get_gemini_quota_status(self) -> Dict[str, Any]:
+        """
+        Get current Gemini quota status for today.
+
+        Returns:
+            Dict with quota_date, request_count, daily_limit, remaining, limit_reached_at
+        """
+        try:
+            # Call the database function
+            result = await self._execute_function("get_todays_gemini_quota")
+            if result and len(result) > 0:
+                row = result[0]
+                return {
+                    "id": row.get("id"),
+                    "quota_date": row.get("quota_date"),
+                    "request_count": row.get("request_count", 0),
+                    "daily_limit": row.get("daily_limit", 20),
+                    "remaining": row.get("remaining", 0),
+                    "limit_reached_at": row.get("limit_reached_at"),
+                }
+            return {
+                "request_count": 0,
+                "daily_limit": 20,
+                "remaining": 20,
+                "limit_reached_at": None,
+            }
+        except Exception:
+            # On error, return conservative estimate
+            return {
+                "request_count": 0,
+                "daily_limit": 20,
+                "remaining": 20,
+                "limit_reached_at": None,
+            }
+
+    async def increment_gemini_quota(self) -> Dict[str, Any]:
+        """
+        Increment today's Gemini API request count.
+
+        Should be called after successfully making a Gemini API request.
+
+        Returns:
+            Dict with success, request_count, daily_limit, remaining
+        """
+        try:
+            # Call the database function
+            result = await self._execute_function("increment_gemini_quota")
+            if result and len(result) > 0:
+                row = result[0]
+                return {
+                    "success": row.get("success", True),
+                    "request_count": row.get("request_count", 1),
+                    "daily_limit": row.get("daily_limit", 20),
+                    "remaining": row.get("remaining", 19),
+                }
+            return {
+                "success": True,
+                "request_count": 1,
+                "daily_limit": 20,
+                "remaining": 19,
+            }
+        except Exception:
+            # On error, still return success to avoid blocking workflow
+            return {
+                "success": True,
+                "request_count": 0,
+                "daily_limit": 20,
+                "remaining": 20,
+            }
+
     async def _execute_function(self, function_name: str) -> Any:
         """
         Execute a PostgreSQL function and return results.
