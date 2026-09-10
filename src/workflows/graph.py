@@ -67,12 +67,12 @@ async def extract_intent_node(state: EmailTriageState) -> Dict:
                     thread_id=state["thread_id"],
                     error_details={"error": error_msg, "step": "extract_intent"},
                     recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                    recovery_message="Thread marked as 'processing_failed' - will not retry automatically",
+                    recovery_message="Thread marked as 'failed' - will not retry automatically",
                     will_retry=False,
                 )
 
                 # Update thread status to failed
-                await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+                await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
                 return {
                     "current_step": "extract_intent",
@@ -91,11 +91,11 @@ async def extract_intent_node(state: EmailTriageState) -> Dict:
                 thread_id=state["thread_id"],
                 error_details={"error": error_msg},
                 recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                recovery_message="Thread marked as 'processing_failed'",
+                recovery_message="Thread marked as 'failed'",
                 will_retry=False,
             )
 
-            await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+            await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
             return {
                 "current_step": "extract_intent",
@@ -133,11 +133,11 @@ async def extract_intent_node(state: EmailTriageState) -> Dict:
             thread_id=state["thread_id"],
             error_details={"error": str(e), "step": "extract_intent"},
             recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-            recovery_message="Thread marked as 'processing_failed' - quota reset at midnight UTC",
+            recovery_message="Thread marked as 'failed' - quota reset at midnight UTC",
             will_retry=False,
         )
 
-        await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+        await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
         return {
             "current_step": "extract_intent",
@@ -157,11 +157,11 @@ async def extract_intent_node(state: EmailTriageState) -> Dict:
             thread_id=state["thread_id"],
             error_details={"error": str(e), "type": type(e).__name__},
             recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-            recovery_message="Thread marked as 'processing_failed'",
+            recovery_message="Thread marked as 'failed'",
             will_retry=False,
         )
 
-        await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+        await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
         return {
             "current_step": "extract_intent",
@@ -222,11 +222,11 @@ async def draft_reply_node(state: EmailTriageState) -> Dict:
                     thread_id=state["thread_id"],
                     error_details={"error": error_msg, "step": "draft_reply"},
                     recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                    recovery_message="Thread marked as 'processing_failed' - will not retry automatically",
+                    recovery_message="Thread marked as 'failed' - will not retry automatically",
                     will_retry=False,
                 )
 
-                await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+                await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
                 return {
                     "current_step": "draft_reply",
@@ -245,11 +245,11 @@ async def draft_reply_node(state: EmailTriageState) -> Dict:
                 thread_id=state["thread_id"],
                 error_details={"error": error_msg},
                 recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                recovery_message="Thread marked as 'processing_failed'",
+                recovery_message="Thread marked as 'failed'",
                 will_retry=False,
             )
 
-            await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+            await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
             return {
                 "current_step": "draft_reply",
@@ -305,11 +305,11 @@ async def draft_reply_node(state: EmailTriageState) -> Dict:
             thread_id=state["thread_id"],
             error_details={"error": str(e), "step": "draft_reply"},
             recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-            recovery_message="Thread marked as 'processing_failed' - quota reset at midnight UTC",
+            recovery_message="Thread marked as 'failed' - quota reset at midnight UTC",
             will_retry=False,
         )
 
-        await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+        await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
         return {
             "current_step": "draft_reply",
@@ -329,11 +329,11 @@ async def draft_reply_node(state: EmailTriageState) -> Dict:
             thread_id=state["thread_id"],
             error_details={"error": str(e), "type": type(e).__name__},
             recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-            recovery_message="Thread marked as 'processing_failed'",
+            recovery_message="Thread marked as 'failed'",
             will_retry=False,
         )
 
-        await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+        await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
         return {
             "current_step": "draft_reply",
@@ -371,11 +371,11 @@ async def send_to_reviewer_node(state: EmailTriageState) -> Dict:
                 draft_id=state["draft_id"],
                 error_details={"error": "No active reviewers found in database"},
                 recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                recovery_message="Thread marked as 'processing_failed' - configure reviewers",
+                recovery_message="Thread marked as 'failed' - configure reviewers",
                 will_retry=False,
             )
 
-            await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+            await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
             return {
                 "current_step": "send_to_reviewer",
@@ -420,7 +420,7 @@ async def send_to_reviewer_node(state: EmailTriageState) -> Dict:
                         "daily_limit": quota_status.get("daily_limit", 50),
                     },
                     recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                    recovery_message="Thread marked as 'processing_failed' - quota resets at midnight UTC",
+                    recovery_message="Thread marked as 'failed' - quota resets at midnight UTC",
                     will_retry=False,
                 )
 
@@ -437,12 +437,12 @@ async def send_to_reviewer_node(state: EmailTriageState) -> Dict:
                     log_database_constraint_violation(
                         thread_id=state["thread_id"],
                         attempted_status="pending_whatsapp_quota",
-                        fallback_status="processing_failed",
+                        fallback_status="failed",
                         error_message=str(e),
                     )
 
                     await db.update_thread_status(
-                        UUID(state["thread_id"]), "processing_failed"
+                        UUID(state["thread_id"]), "failed"
                     )
 
                 # Log the quota event
@@ -481,11 +481,11 @@ async def send_to_reviewer_node(state: EmailTriageState) -> Dict:
                         "message": send_result.get("message"),
                     },
                     recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                    recovery_message="Thread marked as 'processing_failed' - Twilio rate limit",
+                    recovery_message="Thread marked as 'failed' - Twilio rate limit",
                     will_retry=False,
                 )
 
-                await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+                await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
                 return {
                     "current_step": "send_to_reviewer",
@@ -507,11 +507,11 @@ async def send_to_reviewer_node(state: EmailTriageState) -> Dict:
                     "message": send_result.get("message"),
                 },
                 recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                recovery_message="Thread marked as 'processing_failed'",
+                recovery_message="Thread marked as 'failed'",
                 will_retry=False,
             )
 
-            await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+            await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
             return {
                 "current_step": "send_to_reviewer",
@@ -553,11 +553,11 @@ async def send_to_reviewer_node(state: EmailTriageState) -> Dict:
             draft_id=state["draft_id"],
             error_details={"error": str(e), "type": type(e).__name__},
             recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-            recovery_message="Thread marked as 'processing_failed'",
+            recovery_message="Thread marked as 'failed'",
             will_retry=False,
         )
 
-        await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+        await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
         return {
             "current_step": "send_to_reviewer",
@@ -660,11 +660,11 @@ async def send_email_node(state: EmailTriageState) -> Dict:
                 draft_id=state["draft_id"],
                 error_details={"error": error_msg},
                 recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-                recovery_message="Thread marked as 'processing_failed' - email not sent",
+                recovery_message="Thread marked as 'failed' - email not sent",
                 will_retry=False,
             )
 
-            await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+            await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
             return {
                 "current_step": "send_email",
@@ -710,11 +710,11 @@ async def send_email_node(state: EmailTriageState) -> Dict:
             draft_id=state["draft_id"],
             error_details={"error": str(e), "type": type(e).__name__},
             recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-            recovery_message="Thread marked as 'processing_failed'",
+            recovery_message="Thread marked as 'failed'",
             will_retry=False,
         )
 
-        await db.update_thread_status(UUID(state["thread_id"]), "processing_failed")
+        await db.update_thread_status(UUID(state["thread_id"]), "failed")
 
         return {
             "current_step": "send_email",

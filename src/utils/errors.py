@@ -24,7 +24,7 @@ class ErrorRecoveryAction(Enum):
     """What action was taken to recover from the error."""
 
     MARKED_PROCESSED = "marked_processed"  # Email marked as read, won't retry
-    THREAD_FAILED = "thread_failed"  # Thread marked as processing_failed
+    THREAD_FAILED = "thread_failed"  # Thread marked as failed
     QUOTA_WAIT = "quota_wait"  # Waiting for quota reset
     FALLBACK_STATUS = "fallback_status"  # Used fallback DB status
     CIRCUIT_OPENED = "circuit_opened"  # Circuit breaker triggered
@@ -65,7 +65,7 @@ def log_workflow_error(
             thread_id="abc-123",
             error_details={"quota_used": 20, "quota_limit": 20},
             recovery_action=ErrorRecoveryAction.THREAD_FAILED,
-            recovery_message="Thread marked as 'processing_failed'",
+            recovery_message="Thread marked as 'failed'",
             will_retry=False
         )
 
@@ -74,7 +74,7 @@ def log_workflow_error(
            Email: customer@example.com | Subject: Help needed
            Thread: abc-123
            Error Details: {"quota_used": 20, "quota_limit": 20}
-           Action: Thread marked as 'processing_failed'
+           Action: Thread marked as 'failed'
            Recovery: Will NOT retry
     """
     # Build log message
@@ -228,7 +228,7 @@ def log_database_constraint_violation(
         log_database_constraint_violation(
             thread_id="abc-123",
             attempted_status="pending_whatsapp_quota",
-            fallback_status="processing_failed",
+            fallback_status="failed",
             error_message="Check constraint threads_status_check violated"
         )
 
@@ -238,7 +238,7 @@ def log_database_constraint_violation(
            Attempted Status: pending_whatsapp_quota
            Error: Check constraint threads_status_check violated
            ⚠️  ACTION REQUIRED: Check if database migration is needed
-           Fallback: Using status 'processing_failed'
+           Fallback: Using status 'failed'
     """
     lines = [
         "❌ [DATABASE_ERROR] Database constraint violation",
