@@ -248,6 +248,115 @@ class DatabaseService:
     # Audit Log
     # =========================================================================
 
+    # =========================================================================
+    # WhatsApp Quota Tracking
+    # =========================================================================
+
+    async def check_whatsapp_quota_available(self) -> bool:
+        """
+        Check if WhatsApp message quota is available for today.
+
+        Uses the database function to check if we're under the daily limit.
+
+        Returns:
+            True if quota available, False if limit reached
+        """
+        try:
+            # Call the database function
+            result = await self._execute_function("check_whatsapp_quota_available")
+            return result if isinstance(result, bool) else True
+        except Exception:
+            # On error, allow sending (fail open to avoid blocking workflow)
+            return True
+
+    async def get_whatsapp_quota_status(self) -> Dict[str, Any]:
+        """
+        Get current WhatsApp quota status for today.
+
+        Returns:
+            Dict with quota_date, message_count, daily_limit, remaining, limit_reached_at
+        """
+        try:
+            # Call the database function
+            result = await self._execute_function("get_todays_whatsapp_quota")
+            if result and len(result) > 0:
+                row = result[0]
+                return {
+                    "id": row.get("id"),
+                    "quota_date": row.get("quota_date"),
+                    "message_count": row.get("message_count", 0),
+                    "daily_limit": row.get("daily_limit", 30),
+                    "remaining": row.get("remaining", 0),
+                    "limit_reached_at": row.get("limit_reached_at"),
+                }
+            return {
+                "message_count": 0,
+                "daily_limit": 30,
+                "remaining": 30,
+                "limit_reached_at": None,
+            }
+        except Exception:
+            # On error, return conservative estimate
+            return {
+                "message_count": 0,
+                "daily_limit": 30,
+                "remaining": 30,
+                "limit_reached_at": None,
+            }
+
+    async def increment_whatsapp_quota(self) -> Dict[str, Any]:
+        """
+        Increment today's WhatsApp message count.
+
+        Should be called after successfully sending a WhatsApp message.
+
+        Returns:
+            Dict with success, message_count, daily_limit, remaining
+        """
+        try:
+            # Call the database function
+            result = await self._execute_function("increment_whatsapp_quota")
+            if result and len(result) > 0:
+                row = result[0]
+                return {
+                    "success": row.get("success", True),
+                    "message_count": row.get("message_count", 1),
+                    "daily_limit": row.get("daily_limit", 30),
+                    "remaining": row.get("remaining", 29),
+                }
+            return {
+                "success": True,
+                "message_count": 1,
+                "daily_limit": 30,
+                "remaining": 29,
+            }
+        except Exception:
+            # On error, still return success to avoid blocking workflow
+            return {
+                "success": True,
+                "message_count": 0,
+                "daily_limit": 30,
+                "remaining": 30,
+            }
+
+    async def _execute_function(self, function_name: str) -> Any:
+        """
+        Execute a PostgreSQL function and return results.
+
+        Args:
+            function_name: Name of the function to execute
+
+        Returns:
+            Function result
+        """
+        # Use the direct database URL for function calls
+        conn = await asyncpg.connect(self.settings.database_url)
+        try:
+            result = await conn.fetch(f"SELECT * FROM {function_name}()")
+            return [dict(row) for row in result]
+        finally:
+            await conn.close()
+
     async def log_event(
         self,
         event_type: str,

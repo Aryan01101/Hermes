@@ -3,6 +3,7 @@
 import logging
 from typing import Dict, Optional
 
+from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
 from src.core.config import get_settings
@@ -21,6 +22,9 @@ class WhatsAppService:
             settings.twilio_auth_token,
         )
         self.whatsapp_number = settings.twilio_whatsapp_number
+        self.enable_quota_tracking = settings.whatsapp_enable_quota_tracking
+        self.send_confirmations = settings.whatsapp_send_confirmations
+        self.daily_message_limit = settings.twilio_daily_message_limit
 
     # =========================================================================
     # Send Draft for Review
@@ -67,7 +71,29 @@ class WhatsAppService:
         Returns:
             Dict with send status and message SID
         """
+        # Import here to avoid circular dependency
+        from src.services.database import get_database
+
+        db = get_database()
+
         try:
+            # Check quota if tracking is enabled
+            if self.enable_quota_tracking:
+                quota_available = await db.check_whatsapp_quota_available()
+                if not quota_available:
+                    quota_status = await db.get_whatsapp_quota_status()
+                    logger.warning(
+                        f"WhatsApp quota exceeded: {quota_status['message_count']}/{quota_status['daily_limit']} "
+                        f"messages sent today. Limit reached at {quota_status.get('limit_reached_at')}"
+                    )
+                    return {
+                        "success": False,
+                        "error": "quota_exceeded",
+                        "quota_status": quota_status,
+                        "message": f"Daily WhatsApp message limit reached ({quota_status['daily_limit']} messages/day). "
+                        f"Messages will resume tomorrow or upgrade your Twilio account.",
+                    }
+
             # Format confidence as percentage
             confidence_pct = int(confidence_score * 100)
 
@@ -88,7 +114,6 @@ Reply:
 Thread: {thread_id[:8]}..."""
 
             # Send WhatsApp message
-            # Use quote/reply feature so we can track which draft this is
             message = self.client.messages.create(
                 from_=self.whatsapp_number,
                 to=f"whatsapp:{reviewer_phone}",
@@ -99,17 +124,52 @@ Thread: {thread_id[:8]}..."""
                 f"Draft sent to {reviewer_phone} via WhatsApp. SID: {message.sid}"
             )
 
+            # Increment quota if tracking is enabled
+            if self.enable_quota_tracking:
+                quota_result = await db.increment_whatsapp_quota()
+                logger.info(
+                    f"WhatsApp quota updated: {quota_result['message_count']}/{quota_result['daily_limit']} "
+                    f"({quota_result['remaining']} remaining)"
+                )
+
             return {
                 "success": True,
                 "message_sid": message.sid,
                 "status": message.status,
             }
 
+        except TwilioRestException as e:
+            # Specific handling for Twilio rate limit errors
+            if e.status == 429:
+                logger.error(
+                    f"Twilio rate limit exceeded (HTTP 429): {e.msg}",
+                    exc_info=True,
+                )
+                return {
+                    "success": False,
+                    "error": "rate_limit_exceeded",
+                    "error_code": e.code,
+                    "message": f"Twilio rate limit exceeded: {e.msg}. "
+                    "Please upgrade your Twilio account or wait for the limit to reset.",
+                }
+            else:
+                logger.error(
+                    f"Twilio API error (HTTP {e.status}): {e.msg}",
+                    exc_info=True,
+                )
+                return {
+                    "success": False,
+                    "error": "twilio_api_error",
+                    "error_code": e.code,
+                    "message": str(e.msg),
+                }
+
         except Exception as e:
             logger.error(f"Failed to send WhatsApp message: {e}", exc_info=True)
             return {
                 "success": False,
-                "error": str(e),
+                "error": "unknown_error",
+                "message": str(e),
             }
 
     # =========================================================================
@@ -189,7 +249,39 @@ Thread: {thread_id[:8]}..."""
         Returns:
             Dict with send status
         """
+        # Import here to avoid circular dependency
+        from src.services.database import get_database
+
+        db = get_database()
+
         try:
+            # Check if confirmations are enabled
+            if not self.send_confirmations:
+                logger.info(
+                    f"Confirmation skipped (disabled): {action} for {reviewer_phone}"
+                )
+                return {
+                    "success": True,
+                    "skipped": True,
+                    "message": "Confirmations disabled to save quota",
+                }
+
+            # Check quota if tracking is enabled
+            if self.enable_quota_tracking:
+                quota_available = await db.check_whatsapp_quota_available()
+                if not quota_available:
+                    quota_status = await db.get_whatsapp_quota_status()
+                    logger.warning(
+                        f"WhatsApp quota exceeded, skipping confirmation: "
+                        f"{quota_status['message_count']}/{quota_status['daily_limit']}"
+                    )
+                    return {
+                        "success": False,
+                        "error": "quota_exceeded",
+                        "skipped": True,
+                        "quota_status": quota_status,
+                    }
+
             # Build confirmation message based on action
             if action == "sent":
                 message_body = "✅ Reply sent to customer!"
@@ -209,16 +301,47 @@ Thread: {thread_id[:8]}..."""
 
             logger.info(f"Confirmation sent to {reviewer_phone}")
 
+            # Increment quota if tracking is enabled
+            if self.enable_quota_tracking:
+                quota_result = await db.increment_whatsapp_quota()
+                logger.info(
+                    f"WhatsApp quota updated: {quota_result['message_count']}/{quota_result['daily_limit']} "
+                    f"({quota_result['remaining']} remaining)"
+                )
+
             return {
                 "success": True,
                 "message_sid": message.sid,
             }
+
+        except TwilioRestException as e:
+            if e.status == 429:
+                logger.error(
+                    f"Twilio rate limit exceeded (HTTP 429) sending confirmation: {e.msg}",
+                    exc_info=True,
+                )
+                return {
+                    "success": False,
+                    "error": "rate_limit_exceeded",
+                    "skipped": True,
+                }
+            else:
+                logger.error(
+                    f"Twilio API error (HTTP {e.status}) sending confirmation: {e.msg}",
+                    exc_info=True,
+                )
+                return {
+                    "success": False,
+                    "error": "twilio_api_error",
+                    "skipped": True,
+                }
 
         except Exception as e:
             logger.error(f"Failed to send confirmation: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
+                "skipped": True,
             }
 
 

@@ -95,6 +95,18 @@ class Settings(BaseSettings):
     twilio_whatsapp_number: str = Field(
         ..., description="Twilio WhatsApp number (format: whatsapp:+1234567890)"
     )
+    twilio_daily_message_limit: int = Field(
+        default=30,
+        description="Daily WhatsApp message limit (30 for Twilio trial, higher for paid accounts)",
+    )
+    whatsapp_enable_quota_tracking: bool = Field(
+        default=True,
+        description="Enable WhatsApp quota tracking to prevent exceeding daily limits",
+    )
+    whatsapp_send_confirmations: bool = Field(
+        default=True,
+        description="Send confirmation messages after reviewer actions (disable to save quota)",
+    )
 
     # LangGraph
     langgraph_checkpoint_namespace: str = Field(

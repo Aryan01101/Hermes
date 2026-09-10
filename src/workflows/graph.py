@@ -173,9 +173,47 @@ async def send_to_reviewer_node(state: EmailTriageState) -> Dict:
     )
 
     if not send_result["success"]:
+        error_type = send_result.get("error", "unknown")
+
+        # Handle quota exceeded specifically
+        if error_type in ("quota_exceeded", "rate_limit_exceeded"):
+            logger.warning(
+                f"WhatsApp quota/rate limit exceeded. Marking thread for manual review. "
+                f"Error: {send_result.get('message')}"
+            )
+
+            # Update thread status to indicate quota issue
+            await db.update_thread_status(
+                UUID(state["thread_id"]), "pending_whatsapp_quota"
+            )
+
+            # Log the quota event
+            await db.log_event(
+                event_type="whatsapp_quota_exceeded",
+                actor="system",
+                details={
+                    "error": error_type,
+                    "message": send_result.get("message"),
+                    "quota_status": send_result.get("quota_status", {}),
+                },
+                thread_id=UUID(state["thread_id"]),
+                draft_id=UUID(state["draft_id"]),
+            )
+
+            # Continue workflow but mark as needing manual intervention
+            return {
+                "current_step": "quota_exceeded",
+                "error": send_result.get("message"),
+                "quota_status": send_result.get("quota_status", {}),
+            }
+
+        # Handle other errors
+        logger.error(
+            f"WhatsApp send failed: {error_type} - {send_result.get('message')}"
+        )
         return {
             "current_step": "send_to_reviewer",
-            "error": f"WhatsApp send failed: {send_result.get('error')}",
+            "error": f"WhatsApp send failed: {send_result.get('message', error_type)}",
         }
 
     # Attach the WhatsApp SID to the draft record created in draft_reply_node.

@@ -181,6 +181,47 @@ See `.env.example` for required configuration. Key variables:
 - `SENDGRID_API_KEY`: Email sending
 - `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN`: WhatsApp
 
+#### WhatsApp Quota Management (Important!)
+
+Hermes includes built-in quota tracking to prevent exceeding Twilio's rate limits:
+
+**Twilio Trial Accounts:**
+- **Limit:** 30 messages per day (hard limit)
+- **Scope:** Includes both draft notifications AND confirmations
+- **Impact:** Each email workflow can send 2 messages (draft + confirmation)
+- **Recommendation:** Upgrade to paid account for production use
+
+**Configuration Options:**
+```bash
+# Daily message limit (adjust based on your Twilio account)
+TWILIO_DAILY_MESSAGE_LIMIT=30
+
+# Enable quota tracking (recommended)
+WHATSAPP_ENABLE_QUOTA_TRACKING=true
+
+# Disable confirmations to save quota
+WHATSAPP_SEND_CONFIRMATIONS=false  # Saves ~50% of quota
+```
+
+**Quota Tracking Features:**
+- Automatic daily quota monitoring via database
+- Graceful degradation when quota exceeded
+- Clear error messages with quota status
+- Threads marked as `pending_whatsapp_quota` when limit reached
+- Audit log entries for quota events
+
+**Upgrading Twilio Account:**
+1. Visit [Twilio Console](https://console.twilio.com)
+2. Upgrade to a paid account (removes 30 message limit)
+3. Update `TWILIO_DAILY_MESSAGE_LIMIT` in your `.env`
+4. Deploy the updated configuration
+
+**Troubleshooting Rate Limits:**
+- **Error:** `HTTP 429 error: Unable to create record: Account exceeded the 30 daily messages limit`
+- **Quick Fix:** Disable confirmations: `WHATSAPP_SEND_CONFIRMATIONS=false`
+- **Long-term:** Upgrade Twilio account or reduce email volume
+- **Monitoring:** Check quota status in audit logs or database table `whatsapp_quota_tracking`
+
 ## Deployment
 
 ### GCP Cloud Run
