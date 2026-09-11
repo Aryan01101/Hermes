@@ -5,9 +5,11 @@
 -- Drop the old constraint
 ALTER TABLE threads DROP CONSTRAINT IF EXISTS threads_status_check;
 
--- Add the new constraint with the additional status
+-- Add the new constraint with all required statuses
 ALTER TABLE threads ADD CONSTRAINT threads_status_check
 CHECK (status IN (
+    'open',                    -- DEFAULT status from migration 001
+    'resolved',                -- Used when email sent to customer
     'new',
     'processing',
     'pending_review',
@@ -15,9 +17,9 @@ CHECK (status IN (
     'sent',
     'rejected',
     'failed',
-    'pending_whatsapp_quota'  -- NEW STATUS
+    'pending_whatsapp_quota'   -- NEW STATUS (added in this migration)
 ));
 
 -- Comment
 COMMENT ON CONSTRAINT threads_status_check ON threads IS
-'Valid thread statuses including pending_whatsapp_quota for rate limit handling';
+'Valid thread statuses including all legacy and new values';
